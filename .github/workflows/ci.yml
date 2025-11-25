@@ -77,21 +77,3 @@ jobs:
         if: always()
         with:
           sarif_file: trivy-results.sarif
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [build, security]
-    if: github.ref == 'refs/heads/main'
-    timeout-minutes: 5
-    steps:
-      - name: Dry-run Deployment
-        run: |
-          echo "Simulating deployment to staging..."
-          # Здесь можно добавить команды для деплоя (например, docker build/push, git push staging)
-          # Пример:
-          # docker build -t my-app:${{ github.sha }} .
-          # docker push my-app:${{ github.sha }}
-          # Или:
-          # git push origin HEAD:staging
-        env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
