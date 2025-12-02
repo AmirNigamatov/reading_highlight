@@ -24,6 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create Evidence Directory
+        run: |
+          mkdir -p EVIDENCE/P09
+
       - name: Install Syft (for SBOM)
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
@@ -38,7 +42,7 @@ jobs:
 
       - name: Run SCA on SBOM
         run: |
-          grype sbom:EVIDENCE/P09/sbom.json --output json=EVIDENCE/P09/sca_report.json --output template=summary-table.md --file EVIDENCE/P09/sca_summary.md
+          grype sbom:EVIDENCE/P09/sbom.json --output json=EVIDENCE/P09/sca_report.json --output template=table --file EVIDENCE/P09/sca_summary.md
 
       - name: Upload SBOM & SCA Artifacts
         uses: actions/upload-artifact@v4
