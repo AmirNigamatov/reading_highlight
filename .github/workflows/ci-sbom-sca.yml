@@ -1,0 +1,49 @@
+name: Security - SBOM & SCA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'requirements*.txt'
+      - '**/*.py'
+      - '.github/workflows/ci-sbom-sca.yml'
+  pull_request:
+    paths:
+      - 'requirements*.txt'
+      - '**/*.py'
+      - '.github/workflows/ci-sbom-sca.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sbom-sca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Syft (for SBOM)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Generate SBOM (CycloneDX JSON)
+        run: |
+          syft packages dir:. --output cyclonedx-json=EVIDENCE/P09/sbom.json
+
+      - name: Install Grype (for SCA)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Run SCA on SBOM
+        run: |
+          grype sbom:EVIDENCE/P09/sbom.json --output json=EVIDENCE/P09/sca_report.json --output template=template=summary-table.md --file EVIDENCE/P09/sca_summary.md
+
+      - name: Upload SBOM & SCA Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom-sca-evidence
+          path: EVIDENCE/P09/
+          retention-days: 30
