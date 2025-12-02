@@ -42,7 +42,20 @@ jobs:
 
       - name: Run SCA on SBOM
         run: |
-          grype sbom:EVIDENCE/P09/sbom.json --output json=EVIDENCE/P09/sca_report.json --output template=table --file EVIDENCE/P09/sca_summary.md
+          grype sbom:EVIDENCE/P09/sbom.json --output json=EVIDENCE/P09/sca_report.json
+
+      - name: Generate SCA Summary
+        run: |
+          jq -r '
+            def severity_count(sev): .matches | map(.vulnerability.severity) | map(select(. == sev)) | length;
+            "Critical: \(severity_count("Critical"))",
+            "High: \(severity_count("High"))",
+            "Medium: \(severity_count("Medium"))",
+            "Low: \(severity_count("Low"))",
+            "Unknown: \(severity_count("Unknown"))"
+          ' EVIDENCE/P09/sca_report.json > EVIDENCE/P09/sca_summary.md
+          echo "" >> EVIDENCE/P09/sca_summary.md
+          echo "Brief comment: This summary shows the count of vulnerabilities by severity level." >> EVIDENCE/P09/sca_summary.md
 
       - name: Upload SBOM & SCA Artifacts
         uses: actions/upload-artifact@v4
