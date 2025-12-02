@@ -88,8 +88,7 @@ jobs:
 
   deploy-staging:
     runs-on: ubuntu-latest
-    needs: [build, security]  # Зависит от успешного CI
-    if: github.ref == 'refs/heads/main'  # Только на push в main (для staging)
+    needs: [build, security]
     steps:
       - uses: actions/checkout@v4
       - name: Log CI Completion Proof
