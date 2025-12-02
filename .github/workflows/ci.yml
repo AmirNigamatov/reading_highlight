@@ -2,11 +2,9 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, stage]
-
+    branches: [main]
 permissions:
   contents: read
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -14,7 +12,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -23,84 +20,68 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
-      - name: Install dependencies (test)
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run Tests
+      - name: Lint & Format
         run: |
-          pytest tests/ --verbose --junitxml=pytest.xml
+          ruff check --output-format=github .
+          black --check .
+          isort --check-only .
 
-      - name: Upload Test Results
+      - name: Tests
+        run: |
+          pytest -q --junitxml=reports/junit.xml --cov=./ --cov-report=xml:reports/coverage.xml
+
+      - name: Pre-commit (all files)
+        run: pre-commit run --all-files
+
+      - name: Use Secret
+        run: |
+          if [ -n "${{ secrets.MY_SECRET }}" ]; then
+            echo "Secret is set and masked: ${{ secrets.MY_SECRET }}"
+          else
+            echo "Secret MY_SECRET is not set"
+          fi
+
+
+      - name: Upload Test Artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
-          path: pytest.xml
+          name: test-reports
+          path: |
+            reports/junit.xml
+            reports/coverage.xml
           retention-days: 7
 
   security:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy
 
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Run Trivy vulnerability scan
+        run: |
+          trivy fs --format sarif --output trivy-results.sarif --severity HIGH,CRITICAL .
+
+      - name: Upload Trivy Scan Results
         uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-  stage-deploy:
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/stage'
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: requirements.txt
-
-      - name: Install dependencies (production)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Check Secret Availability
-        run: |
-          if [ -n "${{ secrets.MY_SECRET }}" ]; then
-            echo "Secret MY_SECRET is available (length: ${#secrets.MY_SECRET})."
-          else
-            echo "Secret MY_SECRET not set or empty."
-            exit 1
-          fi
-
-      - name: Run Application (Emulation/Probe Run) with Secret
-        env:
-          MY_API_KEY: ${{ secrets.MY_SECRET }}
-        run: |
-          echo "Using secret for deployment simulation..."
-          python main.py list
-          echo "Stage deploy emulation successful with secret."
-
-      - name: Upload Stage Logs (Optional)
-        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: stage-logs
-          path: |
-            data.json
-          retention-days: 7
+          sarif_file: trivy-results.sarif
